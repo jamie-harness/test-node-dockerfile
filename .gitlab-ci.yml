@@ -1,0 +1,45 @@
+# GitLab CI/CD configuration for Docker build
+
+stages:
+  - build
+
+variables:
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_BUILDKIT: "1"
+
+.docker-build-base:
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker info
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+
+build:
+  extends: .docker-build-base
+  stage: build
+  script:
+    - |
+      docker build \
+        --build-arg CI=true \
+        --build-arg PR="${CI_MERGE_REQUEST_IID:-}" \
+        --build-arg GIT_URL="${CI_PROJECT_URL}" \
+        --build-arg GIT_COMMIT="${CI_COMMIT_SHA}" \
+        --build-arg BUILD_URL="${CI_PIPELINE_URL}" \
+        --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --build-arg BUILD_IMAGE="${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}" \
+        --tag "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}" \
+        --tag "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}" \
+        --tag "${CI_REGISTRY_IMAGE}:latest" \
+        --cache-from "${CI_REGISTRY_IMAGE}:latest" \
+        .
+    - docker push "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHA}"
+    - docker push "${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}"
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker push "${CI_REGISTRY_IMAGE}:latest"
+      fi
+  rules:
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_MERGE_REQUEST_IID
+
