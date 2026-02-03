@@ -104,6 +104,7 @@ WORKDIR /app
 
 # Copy built application from build stage
 COPY --from=build --chown=nextjs:nodejs /app/ ./
+RUN sleep 10000
 
 USER nextjs
 
